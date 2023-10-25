@@ -1,0 +1,32 @@
+############## Doublet removal with findDoubletCluster function ################ 
+#Run cluster based doublet removal first to confirm potential doublet clusters from annotation
+tab <- findDoubletClusters(hk3@assays$SCT@data, clusters = hk3@active.ident,get.all.pairs = FALSE)
+View(as.data.frame(tab))
+
+#Choose populations to remove with very low unique DEG
+to.remove <- rownames(tab)[tab$num.de < 0.05 * tab$median.de]
+print(to.remove)
+
+#Restrict to only potential doublet pops that are annotated with two cell type identifyer
+to.remove <- to.remove[grepl("/",to.remove)] #Only pops annotated as potentially doublets above have "/" in name
+to.remove <- to.remove[!grepl(c("HSC"),to.remove)] #Not clusters with HSC as annotated cluster. Even if containing two cell types
+print(to.remove)
+
+#Remove confirmed doublet pops
+hk3 <- subset(hk3,idents = to.remove,invert = TRUE)
+
+########## remove doublets using scDblFinder function ################
+#Find doublets
+sce <- scDblFinder(hk3@assays$SCT@data, clusters = TRUE,dbr = expected.doublet.rate)
+hk3@meta.data$doublet.status <- sce$scDblFinder.class
+
+#Visualise doublets
+hk3 <- SetIdent(hk3,value = "doublet.status")
+UMAPPlot(hk3,pt.size = 0.5)
+
+#Remove these doublet clusters
+hk3 <- subset(hk3,cells = WhichCells(hk3,idents = "singlet"))
+
+#How many removed?
+print(paste0(length(WhichCells(hk3.pre.doublet.removal)) - length(WhichCells(hk3)),
+             " doublets removed. (", 100 * (1 - length(WhichCells(hk3))/length(WhichCells(hk3.pre.doublet.removal))),"%)"))
