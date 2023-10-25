@@ -1,0 +1,32 @@
+ulimit -n 30000
+
+STAR \
+--runMode alignReads \
+--runThreadN 33 \
+--genomeDir /data/RT/temp_data/starIndexSSisav_2023_149 \
+--sjdbOverhang 149 \
+--readFilesIn \
+/data/XXXXX_S1_L002_R2_001.fastq.gz,\ #XXXXX - samplename (HK3/HK5/pbs3/pbs9)
+/data/XXXXX_S1_L001_R2_001.fastq.gz\
+/data/XXXXX_S1_L002_R1_001.fastq.gz,\
+/data/XXXXX_S1_L001_R1_001.fastq.gz \
+--readFilesCommand zcat \
+--outSAMtype BAM SortedByCoordinate \
+--outSAMmode Full \
+--outSAMattributes GX CB UB \
+--soloType CB_UMI_Simple \
+--soloCBwhitelist /data/RT/onedrive_ed/useful_general_data/3M-february-2018.txt \
+--clipAdapterType CellRanger4 \
+--soloFeatures GeneFull_Ex50pAS GeneFull Gene Velocyto \
+--soloUMIdedup 1MM_CR \
+--outFilterMatchNmin 40 \
+--outFilterScoreMin 40 \
+--soloCBstart 1 \
+--soloCBlen 16 \
+--soloUMIstart 17 \
+--soloUMIlen 10 \
+--soloBarcodeReadLength 0 \
+--soloUMIfiltering MultiGeneUMI_CR \
+--soloCellFilter EmptyDrops_CR \
+--soloMultiMappers EM \
+--limitOutSJcollapsed 10000000 
