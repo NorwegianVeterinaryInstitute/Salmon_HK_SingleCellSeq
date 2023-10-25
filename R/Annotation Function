@@ -1,0 +1,132 @@
+#Annotation function (Created by Richard S Taylor)
+AnnotateClusters <- function(object,
+                             cluster.markers,
+                             assay = "SCT",
+                             strategy = "clusters",
+                             clusters = TRUE,
+                             dims = 30,
+                             reduction = "pca",
+                             resolution = 10,
+                             verbose = FALSE,
+                             min.av.expr = 0.1,
+                             min.prop.markers = 1/2,
+                             sds = 1,
+                             plot = TRUE,
+                             calc.umap = FALSE){
+  
+  if (clusters == TRUE){
+  object <- FindNeighbors(object, dims = 1:dims, reduction = reduction,assay = assay)
+  object <- FindClusters(object,resolution = resolution,graph.name = )
+  }
+  
+  if (calc.umap == TRUE){
+    object <- RunUMAP(object,seed.use = 488,dims = 1:dims)
+  }
+  
+  #Store annotations
+  results <- data.frame(row.names = levels(object))
+  
+  #Perform test based on markers for each potential annotation
+  if (assay == "SCT"){count.matrix <- data.frame(object@assays$SCT@data)}
+  if (assay == "RNA"){count.matrix <- data.frame(object@assays$RNA@data)}
+  
+  if (strategy == "clusters")
+  {
+    for (entry in cluster.markers)
+    { #Need to add row of zeros to count matrix if gene is not present in the count matrix
+      for (gene in entry[-1]) {
+        if (!(gene %in% rownames(count.matrix))){
+          count.matrix[gene,] <- 0
+        }
+      }
+      
+      #Find average expression in each cluster
+      av.expression.by.cluster <- as.data.frame(AverageExpression(object, features = entry[-1],assays = assay,slot = "data")[[assay]])
+      #Need to add row of zeros if gene is not present in the object
+      for (gene in entry[-1]) {
+       if (!(gene %in% rownames(av.expression.by.cluster))){
+         av.expression.by.cluster[gene,] <- 0
+        }
+      }
+      
+      #Average values across clusters
+      av.over.clusters <- colMeans(av.expression.by.cluster)
+      
+      #Averages and SD across all cells
+      av.expression.all.cells <- apply(count.matrix[entry[-1],], 1, ExpMean)
+      sd.expression.all.cells <- apply(count.matrix[entry[-1],], 1, ExpSD)
+
+      #Does each cluster meet threshold expression of markers?
+      signature.result <- (av.expression.by.cluster > av.expression.all.cells + (sds * sd.expression.all.cells))  &
+                          (av.expression.by.cluster > min.av.expr)
+
+      #Check if each pop can be classified as this cell type. 
+      #Require here reasonable absolute expression (in case no cells present of this type so very low mean marker expression)
+
+      min.marker.threshold = length(rownames(signature.result)) * min.prop.markers
+      results[,entry[1]] <- ifelse((colSums(signature.result) >= min.marker.threshold), entry[1],NA)
+
+            if (verbose == TRUE){
+        cat(paste0("\n\n################# ",entry[1]," #################\n"))
+
+        cat("\nAverage expression of each marker (treating each cluster equally regardless of size):\n\n")
+        print(feature.scaled.mean)
+        print("Average across clusters")
+        print(av.exp.of.all.markers)
+        cat("\nCluster average off all markers for this cell type:\n\n")
+        print(per.cluster.average)  
+        cat("\nIs each marker > average expression in each population:\n")
+        print(signature.result)
+        
+        cat("\nMarker threshold to be classified as this cell type:\n")
+        print(paste0(">=", length(rownames(signature.result))/2))
+        cat("\nNumber of markers sufficiently highly expressed:\n")
+        print(colSums(signature.result))
+      }
+    }
+    
+    
+    #Combine multiple annotations into single name
+    out <- apply(results, 1, 
+                 function(x) paste(x[!is.na(x)], collapse = "/"))
+    
+    #Retain old cluster name if no new annotation
+    out <- ifelse(out == "", names(out),out)
+   #Relabel clusters
+    object@active.ident <- plyr::mapvalues(x = object@active.ident, from = names(out), to = out)
+    
+    #Output for error correction
+    if (verbose == TRUE){
+      cat("\n\n\nFinal Results:\n")
+      print(results)
+      
+      print("out:")
+      print(out)
+      print(levels(object))
+      
+    }
+    
+    #Plot
+    if (plot == TRUE){
+      plot(UMAPPlot(object, pt.size=0.5,label = TRUE) & NoLegend())
+    }
+    
+    return(object)
+  }
+  
+  if (strategy == "cells")
+  {
+    results.cells <- data.frame(row.names = WhichCells(object))
+    
+    for (entry in cluster.markers)
+    {
+      cell.test <- colSums(pbs3@assays$RNA@scale.data[entry[-1],] > mean(pbs3@assays$RNA@scale.data[entry[-1],]) + 1 * abs(mean(pbs3@assays$RNA@scale.data[entry[-1],])))
+      results.cells[,entry[1]] <- cell.test >= length(entry[-1]) - 2 
+    }
+    results.cells["type"] <- ifelse(rowSums(results.cells)>1,"Doublet","Singlet")
+    print(results.cells[1000:1100,])
+    
+    return(results.cells)
+  }
+  
+}
