@@ -1,0 +1,43 @@
+#Scripts used for filtering low quality cells
+#Read in matrices - use post Cellbender filtered count matrix
+
+hk3.data <- Read10X_h5("/external1/RT/scs/processing/head_kidney_project/hk3/cellbender/hk3_cellbender_filtered.h5",use.names = FALSE)
+hk3 <- CreateSeuratObject(counts = hk3.data,min.cells = 5,min.features = 0,project = "hk3",)
+
+#Add meta data on condition and datasource
+hk3@meta.data[,"dataset"] <- "hk3"
+hk3@meta.data[,"condition"] <- "Control"
+
+#Calculate mitochondrial % to regress out with sctransform.
+mt.genes = c("ENSSSAG00000000007","ENSSSAG00000000011","ENSSSAG00000000017",
+             "ENSSSAG00000000020","ENSSSAG00000000022","ENSSSAG00000000023",
+             "ENSSSAG00000000024","ENSSSAG00000000026","ENSSSAG00000000028",
+             "ENSSSAG00000000029","ENSSSAG00000000033","ENSSSAG00000000034",
+             "ENSSSAG00000000036")
+
+#Remove mt.genes that are not present in the seurat hk3 i.e. are expressed in too few cells so was filtered out in "CreateSeurathk3" function above
+mt.genes.present <- mt.genes[mt.genes %in% rownames(hk3@assays$RNA@counts)]
+print(paste0(length(mt.genes.present),"/",length(mt.genes), " mito genes present in the count matrix"))
+
+#Ribosomal content
+rbgenes <- read.table(file= "/external1/RT/head_kidney_atlas/scripts/adriana_test/rbgenes_Ssalar.csv",sep = ",", header = TRUE)
+ribo.genes <- rbgenes[,1]
+ribo.genes.present <- ribo.genes[ribo.genes %in% rownames(hk3@assays$RNA@counts)]
+print(paste0(length(ribo.genes.present),"/",length(ribo.genes), " ribo genes present in the count matrix"))
+
+#Calculate % with Seurat function
+hk3 <- PercentageFeatureSet(hk3,features = mt.genes.present,col.name = "percent.mt")
+hk3 <- PercentageFeatureSet(hk3,features = ribo.genes.present,col.name = "percent.ribo")
+
+p1 <- VlnPlot(hk3,features = c("percent.mt"),pt.size = 0) + geom_hline(yintercept = 20) + NoLegend()
+p2 <- VlnPlot(hk3,features = c("percent.ribo"),pt.size = 0) + geom_hline(yintercept = 20) + NoLegend()
+p3 <- VlnPlot(hk3,features = c("nFeature_RNA"),pt.size = 0,y.max = 10000) + geom_hline(yintercept = 150) + NoLegend()
+p4 <- VlnPlot(hk3,features = c("nCount_RNA"),pt.size = 0,y.max = 20000) + geom_hline(yintercept = 150) + NoLegend()
+plot_grid(p1,p2,p3,p4,nrow = 2)
+
+#Possibly subset on mitochondrial proportion
+#poor.quality.cells <- WhichCells(hk3)[hk3@meta.data$percent.mt > 20 | hk3@meta.data$percent.ribo > 20 | hk3@meta.data$nFeature_RNA < 200 | hk3@meta.data$nCount_RNA < 300]
+poor.quality.cells <- WhichCells(hk3)[hk3@meta.data$percent.mt > 20 | hk3@meta.data$nFeature_RNA < 150 | hk3@meta.data$nCount_RNA < 150]
+
+print(length(poor.quality.cells))
+hk3 <- subset(hk3,cells = poor.quality.cells , invert = T)
